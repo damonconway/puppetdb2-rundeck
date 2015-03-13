@@ -18,6 +18,8 @@ before do
 end
 
 get '/' do
+  debug   = true
+  pid     = Process.pid
   uri     = URI.parse("#{host_uri}:#{port}/v3/resources")
   http    = Net::HTTP.new(uri.host, uri.port) 
   request = Net::HTTP::Get.new(uri.path) 
@@ -27,14 +29,18 @@ get '/' do
   response      = http.request(request)
   puppetdb_data = JSON.parse(response.body)
 
+  f = File.new("/tmp/puppetdb-rundeck-#{pid}-resources", "w") if debug
+
   rundeck_resources = Hash.new
   puppetdb_data.each{|d|
     host  = d['certname']
     title = d['title']
+    f.puts "Host: #{host} Title: #{title}" if debug
     rundeck_resources[host] = Hash.new if not rundeck_resources.key?(host)
     rundeck_resources[host]['tags'] = Array.new if not rundeck_resources[host].key?('tags')
     rundeck_resources[host]['tags'] << title
   }
+  f.close if f
   
   rundeck_resources.keys.sort.each { |k|
     rundeck_resources[k]['tags'].uniq!
@@ -50,16 +56,22 @@ get '/' do
   response      = http.request(request)
   puppetdb_data = JSON.parse(response.body)
  
+  f = File.new("/tmp/puppetdb-rundeck-#{pid}-facts", "w") if debug
+
   puppetdb_data.each{|d|
     host  = d['certname']
+    next if host.nil? or host.empty?
     name  = d['name'] if d['name'] != "hostname"
+    next if name.nil? or name.empty?
     value = d['value'] if d['name'] != "hostname"
+    f.puts "Host: #{host} Name: #{name} Value: #{value}\n" if debug
     if ( name == 'serialnumber' )
       rundeck_resources[host][name] = 'Serial Number ' + value
     else
       rundeck_resources[host][name] = value
     end
   }
+  f.close if f
 
   rundeck_resources.to_yaml
 end
